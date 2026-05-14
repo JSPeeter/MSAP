@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Analyzátor Pro</title>
+    <style>
+        :root {
+            --bg: #0b0c10; --panel: #1f2833; --accent: #66fcf1; --accent-dim: #45a29e;
+            --text: #c5c6c7; --text-light: #ffffff; --danger: #ff4757; --warning: #f39c12; --border: #333;
+            --bass: #ff9f43; --mid: #1dd1a1; --high: #5f27cd;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding: 20px; overflow-x: hidden; }
+        body.focus-mode header, body.focus-mode .panel:not(.focus-keep) { display: none !important; }
+        body.focus-mode .container { grid-template-columns: 1fr; max-width: 100%; padding: 0; margin: 0; }
+
+        .container { max-width: 1500px; margin: 0 auto; display: grid; gap: 20px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 1100px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        .panel { background: var(--panel); border-radius: 10px; padding: 20px; border: 1px solid var(--border); box-shadow: 0 5px 15px rgba(0,0,0,0.5); position: relative; }
+        h1, h2, h3 { color: var(--text-light); font-weight: 600; margin-bottom: 15px; }
+        h1 { text-align: center; color: var(--accent); margin-bottom: 25px; letter-spacing: 1px; }
+        h2 { font-size: 1.1rem; border-bottom: 1px solid var(--border); padding-bottom: 10px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+
+        .drop-zone { border: 2px dashed var(--accent-dim); border-radius: 8px; padding: 40px; text-align: center; cursor: pointer; transition: 0.2s; background: rgba(102,252,241,0.02); }
+        .drop-zone:hover, .drop-zone.dragover { background: rgba(102,252,241,0.1); border-color: var(--accent); }
+        .drop-zone input { display: none; }
+        .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; justify-content: center; }
+        .badge { background: rgba(0,0,0,0.3); padding: 5px 12px; border-radius: 20px; font-size: 0.85rem; border: 1px solid rgba(255,255,255,0.1); }
+
+        button { background: var(--accent); color: #000; border: none; padding: 6px 14px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.85rem; }
+        button:hover:not(:disabled) { background: var(--text-light); }
+        button:disabled { background: var(--border); color: #777; cursor: not-allowed; }
+        button.outline { background: transparent; border: 1px solid var(--accent-dim); color: var(--accent); }
+        button.outline:hover:not(:disabled) { background: var(--accent-dim); color: #fff; }
+
+        input[type="range"] { -webkit-appearance: none; width: 100px; background: transparent; vertical-align: middle; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 14px; width: 14px; border-radius: 50%; background: var(--accent); cursor: pointer; margin-top: -5px; }
+        input[type="range"]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: var(--border); border-radius: 2px; }
+        input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
+
+        select { background: #111; color: #fff; border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; outline: none; font-size: 0.8rem; cursor: pointer; }
+
+        .toolbar-group { display: inline-flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 6px; font-size: 0.8rem; border: 1px solid var(--border); flex-wrap: wrap; }
+        
+        .controls-row { display: flex; gap: 15px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+        .time-display { font-family: 'Courier New', monospace; font-size: 1.2rem; color: var(--accent); }
+        .timeline-wrap { position: relative; margin: 25px 0 10px 0; }
+        .markers-track { position: absolute; top: -20px; left: 0; width: 100%; height: 15px; pointer-events: none; }
+        .marker { position: absolute; transform: translateX(-50%); background: var(--danger); color: #fff; font-size: 0.65rem; padding: 2px 5px; border-radius: 3px; pointer-events: auto; cursor: pointer; z-index: 10; font-weight:bold; }
+        .marker::after { content:''; position:absolute; bottom:-4px; left:50%; transform:translateX(-50%); border-width:4px 4px 0; border-style:solid; border-color:var(--danger) transparent transparent transparent; }
+
+        .canvas-container { position: relative; width: 100%; background: #000; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-top: 10px; }
+        .layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+        .stat-box { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; justify-content: center; }
+
+        .live-analysis-grid { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr); gap: 10px; align-items: stretch; }
+        .live-analysis-grid .stat-box { min-height: 112px; }
+        .pitch-wide-box { grid-column: 1 / -1; min-height: 142px; }
+        .pitch-wide-content { display: grid; grid-template-columns: minmax(150px, 0.85fr) minmax(220px, 1.15fr); gap: 18px; align-items: center; width: 100%; margin-top: 6px; }
+        .pitch-note-big { color: var(--accent); font-size: 2rem; line-height: 1.1; }
+        .pitch-hz-big { font-size: 1.1rem; margin-top: 4px; }
+        .top-freq-list { font-size: 1rem; line-height: 1.45; margin-top: 6px; }
+        @media (max-width: 700px) {
+            .live-analysis-grid, .pitch-wide-content { grid-template-columns: 1fr; }
+            .pitch-wide-box { min-height: 170px; }
+        }
+        .stat-val { font-size: 1.2rem; font-weight: bold; color: var(--text-light); font-family: monospace; margin: 4px 0; }
+        .stat-label { font-size: 0.7rem; color: var(--accent-dim); text-transform: uppercase; letter-spacing: 0.5px; position: relative; display: flex; justify-content: center; align-items: center;}
+
+        /* Tooltip CSS */
+        .info-wrap { position: relative; display: inline-block; margin-left: 6px; }
+        .info-icon { background: rgba(255,255,255,0.08); color: var(--accent); border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; cursor: help; font-weight: bold; font-family: monospace; border: 1px solid var(--accent-dim); }
+        .info-tooltip { position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%); background: #111; border: 1px solid var(--accent); color: #ddd; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; width: max-content; max-width: 200px; z-index: 1000; opacity: 0; pointer-events: none; transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.5); text-transform: none; letter-spacing: normal; text-align: center; font-weight: normal; line-height: 1.3;}
+        .info-wrap:hover .info-tooltip, .info-wrap:active .info-tooltip { opacity: 1; pointer-events: auto; }
+
+        .loader-overlay { display: none; position: absolute; inset: 0; background: rgba(11, 12, 16, 0.85); z-index: 100; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px); border-radius: 10px;}
+        .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .progress-track { width: 60%; max-width: 300px; height: 6px; background: #222; border-radius: 3px; overflow: hidden; margin-top: 10px; }
+        .progress-bar { height: 100%; width: 0%; background: var(--accent); transition: width 0.1s; }
+
+        .tuner-wrap { height: 16px; background: #222; border-radius: 8px; position: relative; margin-top: 8px; overflow:hidden;}
+        .tuner-center { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.2); transform: translateX(-50%); }
+        .tuner-ind { position: absolute; left: 50%; top: 0; bottom: 0; width: 8px; background: var(--accent); border-radius: 4px; transform: translateX(-50%); transition: left 0.1s; }
+        
+        .eq-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+        .eq-grid input[type="range"] { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 10px; height: 100px; margin: 10px auto; }
+        
+        .summary-box { background: rgba(102, 252, 241, 0.05); border-left: 4px solid var(--accent); padding: 15px; border-radius: 4px; margin-top: 15px; font-style: italic; color: #eee; }
+        .energy-bar-wrap { height: 6px; background: #333; border-radius: 3px; margin-top: 4px; overflow: hidden; display: flex; }
+        .energy-bar { height: 100%; transition: width 0.2s; }
+        .warning-clip { color: var(--danger); font-weight: bold; animation: pulse 1s infinite; display: none; font-size: 0.8rem; margin-top: 5px; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+
+        .key-moments-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 10px; }
+        .moment-card { background: rgba(0,0,0,0.22); border: 1px solid rgba(102,252,241,0.18); border-left: 4px solid var(--accent-dim); border-radius: 8px; padding: 12px; }
+        .moment-card strong { color: var(--accent); display: block; margin-bottom: 4px; }
+        .moment-card .moment-time { color: var(--text-light); font-family: monospace; font-weight: bold; margin-bottom: 6px; }
+        .moment-card p { font-size: 0.85rem; margin-bottom: 8px; color: var(--text); }
+        .moment-intro { border-left-color: #66fcf1; }
+        .moment-drop { border-left-color: #ff9f43; }
+        .moment-quiet { border-left-color: #5f27cd; }
+        .moment-loud { border-left-color: #ff4757; }
+        .moment-transition { border-left-color: #1dd1a1; }
+
+        .graph-cursor-tooltip { position: absolute; display: none; pointer-events: none; z-index: 60; background: rgba(0,0,0,0.88); color: #fff; border: 1px solid var(--accent); border-radius: 6px; padding: 6px 9px; font-size: 0.75rem; font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.55); white-space: nowrap; }
+        .mini-hint { font-size: 0.72rem; color: var(--text); opacity: 0.85; margin-left: 6px; }
+    </style>
+</head>
+<body>
+
+<header><h1>🎧 Audio Analyzátor Pro</h1></header>
+
+<div class="container">
+    <div class="panel">
+        <div class="drop-zone" id="dropZone">
+            <h3 style="margin-bottom:5px; color:var(--accent);">Potiahni súbor sem</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem;">Podporované formáty: WAV, MP3</p>
+            <input type="file" id="fileInput" accept="audio/wav, audio/mp3, audio/mpeg">
+        </div>
+        <div class="badges" id="fileInfo"></div>
+    </div>
+
+    <div class="panel">
+        <h2>Prehrávač a Časová os</h2>
+        <div class="controls-row">
+            <button id="btnPlay" disabled>▶ Play</button>
+            <div class="time-display"><span id="txtTime">00:00.000</span> / <span id="txtDur">00:00.000</span></div>
+            <div class="toolbar-group" style="margin-left:auto;">
+                <span>Hlasitosť</span>
+                <input type="range" id="slVol" min="0" max="1" step="0.01" value="0.8">
+            </div>
+        </div>
+        <div class="timeline-wrap">
+            <div class="markers-track" id="markersTimeline"></div>
+            <input type="range" id="timeline" min="0" max="100" value="0" step="0.001" disabled style="width:100%;">
+        </div>
+    </div>
+
+    <div class="panel focus-keep">
+        <h2>
+            <div class="stat-label" style="text-transform:none; font-size:1.1rem; color:#fff;">
+                Waveform
+                <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Časový priebeh hlasitosti celej skladby. Pomáha identifikovať štruktúru a dynamiku.</span></span>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <div class="toolbar-group"><span>Zoom</span><input type="range" id="slZoomW" min="1" max="50" step="0.1" value="1" disabled></div>
+            </div>
+        </h2>
+        <div class="canvas-container" style="height: 120px; cursor: text;" id="wrapW">
+            <canvas id="canWBase" class="layer"></canvas>
+            <canvas id="canWOver" class="layer" style="pointer-events:none;"></canvas>
+            <div id="waveCursorTip" class="graph-cursor-tooltip"></div>
+        </div>
+    </div>
+
+    <div class="panel focus-keep">
+        <div id="loadSpec" class="loader-overlay">
+            <div class="spinner"></div>
+            <div id="txtLoadSpec" style="font-weight:bold; color:var(--text-light);">Generujem FFT maticu...</div>
+            <div class="progress-track"><div class="progress-bar" id="barSpec"></div></div>
+        </div>
+        <h2>
+            <div class="stat-label" style="text-transform:none; font-size:1.1rem; color:#fff;">
+                Spektrogram
+                <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Zobrazuje energiu frekvencií v čase. X os = čas, Y os = frekvencia, Jas/Farba = intenzita.</span></span>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <div class="toolbar-group" style="background:rgba(102,252,241,0.08); border-color:var(--accent-dim);">
+                    <button id="btnSpecPlay" class="outline" disabled>▶ Play</button>
+                    <button id="btnSpecPause" class="outline" disabled>⏸ Pause</button>
+                    <button id="btnSpecStop" class="outline" disabled>⏹ Stop</button>
+                </div>
+                <div class="toolbar-group">
+                    <span style="color:var(--accent-dim);">Mód:</span>
+                    <select id="selSpecMode" disabled>
+                        <option value="2d" selected>2D Spektrogram</option>
+                        <option value="3d">3D Izometrický</option>
+                    </select>
+                </div>
+                <div class="toolbar-group">
+                    <span style="color:var(--accent-dim);">Kvalita FFT:</span>
+                    <select id="selQual" disabled>
+                        <option value="fast">Rýchla (1024)</option>
+                        <option value="bal" selected>Vyvážená (2048)</option>
+                        <option value="high">Vysoká (4096)</option>
+                    </select>
+                </div>
+                <div class="toolbar-group">
+                    <span style="color:var(--accent-dim);">Režim kamery:</span>
+                    <select id="selCam" disabled>
+                        <option value="page">Stránkovanie</option>
+                        <option value="center">Vycentrované (Waterfall)</option>
+                    </select>
+                </div>
+            </div>
+        </h2>
+        
+        <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; align-items: center;">
+            <div class="toolbar-group">
+                <span style="color:var(--bass);">Filtre pásiem:</span>
+                <label><input type="checkbox" id="chkFilterBass" checked> Basy</label>
+                <label><input type="checkbox" id="chkFilterMid" checked> Stredy</label>
+                <label><input type="checkbox" id="chkFilterHigh" checked> Výšky</label>
+            </div>
+            <div class="toolbar-group">
+                <span style="color:var(--mid);">Zobrazenie:</span>
+                <select id="selView" disabled>
+                    <option value="orig">Pôvodný</option>
+                    <option value="eq">S aplikovaným EQ</option>
+                    <option value="split" selected>Split View (Orig / EQ)</option>
+                </select>
+            </div>
+            <div class="toolbar-group">
+                <span>Os Y:</span>
+                <select id="selLog" disabled>
+                    <option value="lin">Lineárna</option>
+                    <option value="log" selected>Logaritmická</option>
+                </select>
+            </div>
+            <div class="toolbar-group"><span>Zoom X</span><input type="range" id="slZoomSX" min="1" max="50" step="0.1" value="1" disabled></div>
+            <div class="toolbar-group"><span>Zoom Y</span><input type="range" id="slZoomSY" min="1" max="8" step="0.1" value="1" disabled></div>
+            <div class="toolbar-group"><span>Kontrast</span><input type="range" id="slCont" min="0.5" max="3" step="0.1" value="1.2" disabled></div>
+            <div class="toolbar-group"><span>Gain</span><input type="range" id="slGain" min="0" max="100" step="1" value="30" disabled></div>
+            <button id="btnRefreshSpec" class="outline" disabled>Aktualizuj spektrogram</button>
+        </div>
+
+        <div class="canvas-container" style="height: 450px; cursor: crosshair;" id="wrapS">
+            <canvas id="canSBase" class="layer"></canvas>
+            <canvas id="canSOver" class="layer" style="pointer-events:none;"></canvas>
+            <div id="specCursorTip" class="graph-cursor-tooltip"></div>
+        </div>
+    </div>
+
+
+    <div class="panel">
+        <h2>
+            Kľúčové momenty v skladbe
+            <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Automaticky odhadnuté časti skladby podľa RMS energie, zmien hlasitosti a štruktúry signálu. Ide o heuristický odhad.</span></span>
+        </h2>
+        <div id="keyMomentsList" class="key-moments-list">
+            <div class="moment-card"><strong>Čakám na audio</strong><p>Po nahratí súboru sa tu zobrazia intro, drop/refrén, tiché pasáže, najhlasnejšia časť a prechody.</p></div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <div class="panel">
+            <div id="loadOff" class="loader-overlay">
+                <div class="spinner"></div><div style="color:#fff;">Analyzujem audio stopy...</div>
+            </div>
+            <h2>Presná Offline Analýza</h2>
+            <div class="stat-grid" style="grid-template-columns: 1fr 1fr;">
+                <div class="stat-box" style="grid-column: span 2; background: rgba(102, 252, 241, 0.05); border-color: var(--accent-dim);">
+                    <div class="stat-label">Klasifikácia Žánru / Zvuku <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Odhadovaný charakter zvuku na základe tempa, dynamiky, energie pásiem a regularity beatov.</span></span></div>
+                    <div class="stat-val" id="valGenre" style="font-size: 1.5rem; color: var(--accent);">--</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">BPM a Rytmus <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Odhad tempa skladby v úderoch za minútu a miera istoty tohto odhadu.</span></span></div>
+                    <div class="stat-val" id="valBpm" style="color:var(--bass);">-- BPM</div>
+                    <div class="stat-label" id="valBpmConf" style="text-transform:none;">--</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Hlasitosť (LUFS) <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Približná vnímaná hlasitosť audia. Čím bližšie k 0, tým hlasnejšie.</span></span></div>
+                    <div class="stat-val" id="valLufs">--</div>
+                    <div class="warning-clip" id="warnClip">⚠️ Pôvodný súbor obsahuje clipping!</div>
+                </div>
+                <div class="stat-box"><div class="stat-label">Dynamický rozsah <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Rozdiel medzi tichšími a hlasnejšími časťami skladby v dB.</span></span></div><div class="stat-val" id="valDyn">--</div></div>
+                <div class="stat-box">
+                    <div class="stat-label">Max Peak <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Najvyššia nameraná špička signálu v celom audiu.</span></span></div><div class="stat-val" id="valPeak">--</div>
+                </div>
+                <div class="stat-box"><div class="stat-label">Crest Factor <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Pomer medzi špičkou signálu a priemernou hlasitosťou (RMS).</span></span></div><div class="stat-val" id="valCrest">--</div></div>
+                <div class="stat-box"><div class="stat-label">ZCR (prechody za sek) <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Koľkokrát signál prejde cez nulovú hodnotu za sekundu. Vyššie hodnoty často znamenajú viac výšok alebo šumu.</span></span></div><div class="stat-val" id="valZcr">--</div></div>
+                <div class="stat-box"><div class="stat-label">Spectral Centroid <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Ťažisko frekvenčného spektra. Vyššia hodnota znamená jasnejší alebo ostrejší zvuk.</span></span></div><div class="stat-val" id="valCent">--</div></div>
+                <div class="stat-box"><div class="stat-label">Spectral Flatness <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Ukazuje, či je zvuk skôr tónový (hudobný) alebo šumový (bicie/hluk). Nízke číslo = tón.</span></span></div><div class="stat-val" id="valFlat">--</div></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Live Analýza a Ekvalizér</h2>
+            
+            <div style="margin-bottom: 15px;">
+                <div class="stat-label" style="text-align:center; display:flex; justify-content:center;">
+                    Dominantné pásmo (<span id="txtDomBand" style="color:var(--accent); margin-left:4px;">--</span>)
+                    <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Ukazuje frekvenčné pásmo, ktoré má v danom momente najviac energie.</span></span>
+                </div>
+                <div class="energy-bar-wrap">
+                    <div class="energy-bar" id="barBass" style="background: var(--bass); width: 33.3%;"></div>
+                    <div class="energy-bar" id="barMid" style="background: var(--mid); width: 33.3%;"></div>
+                    <div class="energy-bar" id="barHigh" style="background: var(--high); width: 33.3%;"></div>
+                </div>
+            </div>
+
+            <div class="live-analysis-grid">
+                <div class="stat-box">
+                    <div class="stat-label">Live RMS & Peak <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Aktuálna energia a max peak. Hodnoty sú merané po EQ a master hlasitosti.</span></span></div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; align-items:center;">
+                        <div>
+                            <div class="stat-label" style="font-size:0.62rem; color:var(--text);">RMS</div>
+                            <span class="stat-val" id="lRms" style="font-size:1.15rem;">0.000</span>
+                        </div>
+                        <div>
+                            <div class="stat-label" style="font-size:0.62rem; color:var(--text);">Peak</div>
+                            <span class="stat-val" id="lPeak" style="font-size:1.15rem;">0.000</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Top 3 dominantné frekvencie <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Tri najvýraznejšie frekvenčné špičky v aktuálnom spektre po EQ.</span></span></div>
+                    <div class="stat-val top-freq-list" id="lTopFreqs">--<br>--<br>--</div>
+                </div>
+                <div class="stat-box pitch-wide-box">
+                    <div class="stat-label">Pitch / Ladička <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">Odhad základnej frekvencie a odchýlka od najbližšieho tónu v centoch.</span></span></div>
+                    <div class="pitch-wide-content">
+                        <div>
+                            <div class="stat-val pitch-note-big" id="lNote">--</div>
+                            <div class="stat-val pitch-hz-big" id="lHz">-- Hz</div>
+                        </div>
+                        <div>
+                            <div class="stat-label" style="text-align:center; margin-bottom:6px;">Odchýlka: <span id="lCents">0</span> centov</div>
+                            <div class="tuner-wrap" style="height:20px;"><div class="tuner-center"></div><div class="tuner-ind" id="tunerInd"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="text-align:center; margin-top:20px; font-size:1rem; border-top:1px solid var(--border); padding-top:15px; display:flex; justify-content:center; align-items:center;">
+                3-Pásmový Ekvalizér
+                <span class="info-wrap"><span class="info-icon">i</span><span class="info-tooltip">3-pásmový ekvalizér ovplyvňujúci prehrávanie a vizualizáciu v spektrograme.</span></span>
+            </h3>
+            <div class="eq-grid">
+                <div><div class="stat-label">Basy (<250Hz)</div><input type="range" id="eqL" min="-12" max="12" step="0.1" value="0"><div class="stat-val" id="eqLV" style="font-size:0.9rem;">0 dB</div></div>
+                <div><div class="stat-label">Stredy (1kHz)</div><input type="range" id="eqM" min="-12" max="12" step="0.1" value="0"><div class="stat-val" id="eqMV" style="font-size:0.9rem;">0 dB</div></div>
+                <div><div class="stat-label">Výšky (>4kHz)</div><input type="range" id="eqH" min="-12" max="12" step="0.1" value="0"><div class="stat-val" id="eqHV" style="font-size:0.9rem;">0 dB</div></div>
+            </div>
+            <div style="text-align:center; margin-top:10px;"><button class="outline" id="btnResEq" disabled>Reset EQ</button></div>
+        </div>
+
+        <div class="panel" style="grid-column: 1 / -1;">
+            <h2>Zhrnutie a Nástroje</h2>
+            <div class="summary-box" id="summaryText">Po nahratí súboru sa tu zobrazí automatické textové zhrnutie audia.</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:15px;">
+                <button id="btnExpW" class="outline" disabled>⬇ Export Waveform</button>
+                <button id="btnExpS" class="outline" disabled>⬇ Export Spektrogram</button>
+                <button id="btnExpJ" class="outline" disabled>⬇ Export JSON</button>
+                <button id="btnFocus" class="outline">🔍 Focus Mode (Iba grafy)</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * Audio Analyzátor Pro
+ * Backend-free, vysoko optimalizované, opravená klasifikácia, real-time EQ v spektrograme,
+ * ochrana pred clippingom, fitrovanie pásiem a tooltipy.
+ */
+
+const $ = id => document.getElementById(id);
+
+// --- STAV ---
+let audioCtx, srcNode, gainNode, eqL, eqM, eqH, anLive, anPitch;
+let audioBuf = null, audioEl = new Audio();
+let isPlaying = false, isDraggingTime = false;
+let markers = [], offStats = {}, keyMoments = [];
+
+let waveCache = [];
+let waveZoom = 1, waveOff = 0, isDragW = false, stDragW = 0, stOffW = 0;
+
+let specData = []; // Lineárna FFT matica (0-255 mapované z dB)
+let specParams = { fft: 2048, hop: 1024, maxFrames: 8000 };
+let specZoomX = 1, specZoomY = 1, specOffX = 0;
+let isDragS = false, stDragS = 0, stOffS = 0;
+
+// Offscreen Canvases pre Split View
+let offscreenOrig = document.createElement('canvas');
+let offCtxOrig = offscreenOrig.getContext('2d', { alpha: false });
+let offscreenEQ = document.createElement('canvas');
+let offCtxEQ = offscreenEQ.getContext('2d', { alpha: false });
+let renderReqId = null;
+
+// UI Elementy
+const ui = {
+    drop: $('dropZone'), fileIn: $('fileInput'), info: $('fileInfo'),
+    btnPlay: $('btnPlay'), slVol: $('slVol'), timeline: $('timeline'),
+    txtTime: $('txtTime'), txtDur: $('txtDur'), trackMark: $('markersTimeline'),
+    wrapW: $('wrapW'), canWB: $('canWBase'), canWO: $('canWOver'), slZoomW: $('slZoomW'),
+    wrapS: $('wrapS'), canSB: $('canSBase'), canSO: $('canSOver'), slZoomSX: $('slZoomSX'), slZoomSY: $('slZoomSY'),
+    selLog: $('selLog'), slCont: $('slCont'), slGain: $('slGain'), selCam: $('selCam'), selQual: $('selQual'), selView: $('selView'),
+    chkBass: $('chkFilterBass'), chkMid: $('chkFilterMid'), chkHigh: $('chkFilterHigh'),
+    loadOff: $('loadOff'), loadSpec: $('loadSpec'), txtLS: $('txtLoadSpec'), barS: $('barSpec'),
+    waveTip: $('waveCursorTip'), specTip: $('specCursorTip'), btnRefreshSpec: $('btnRefreshSpec'),
+    selSpecMode: $('selSpecMode'), btnSpecPlay: $('btnSpecPlay'), btnSpecPause: $('btnSpecPause'), btnSpecStop: $('btnSpecStop'), keyMomentsList: $('keyMomentsList')
+};
+const ctxWB = ui.canWB.getContext('2d', {alpha:false}); const ctxWO = ui.canWO.getContext('2d');
+const ctxSB = ui.canSB.getContext('2d', {alpha:false}); const ctxSO = ui.canSO.getContext('2d');
+
+// --- HELPERS ---
+const fTime = s => isNaN(s) ? "00:00.00" : `${Math.floor(s/60).toString().padStart(2,'0')}:${Math.floor(s%60).toString().padStart(2,'0')}.${Math.floor((s%1)*100).toString().padStart(2,'0')}`;
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const resize = () => {
+    [ui.canWB, ui.canWO, ui.canSB, ui.canSO].forEach(c => { c.width = c.parentElement.clientWidth; c.height = c.parentElement.clientHeight; });
+    if(audioBuf) { drawWaveBase(); drawSpecBase(); drawOverlays(); }
+};
+window.addEventListener('resize', resize);
+
+// --- COLORMAP (Tmavá -> Fialová -> Červená -> Žltá) ---
+const colormap = new Uint32Array(256);
+for(let i=0; i<256; i++) {
+    let r, g, b; const v = i / 255;
+    if(v < 0.2) { r=0; g=0; b=v*5*80; }
+    else if(v < 0.5) { const p=(v-0.2)/0.3; r=p*150; g=0; b=80+p*100; }
+    else if(v < 0.8) { const p=(v-0.5)/0.3; r=150+p*105; g=p*100; b=180-p*130; }
+    else { const p=(v-0.8)/0.2; r=255; g=100+p*155; b=50+p*205; }
+    colormap[i] = (255<<24)|(b<<16)|(g<<8)|r;
+}
+
+// --- VLASTNÁ JS FFT (Cooley-Tukey) ---
+function jsFFT(real, imag) {
+    const n = real.length; let j = 0;
+    for (let i = 0; i < n - 1; i++) {
+        if (i < j) { let tr=real[i], ti=imag[i]; real[i]=real[j]; imag[i]=imag[j]; real[j]=tr; imag[j]=ti; }
+        let k = n >> 1; while (k <= j) { j -= k; k >>= 1; } j += k;
+    }
+    for (let size = 2; size <= n; size <<= 1) {
+        let half = size >> 1, step = -2 * Math.PI / size;
+        for (let i = 0; i < n; i += size) {
+            let wr = 1, wi = 0, wtr = Math.cos(step), wti = Math.sin(step);
+            for (let m = i; m < i + half; m++) {
+                let l = m + half;
+                let tr = real[l]*wr - imag[l]*wi, ti = real[l]*wi + imag[l]*wr;
+                real[l] = real[m] - tr; imag[l] = imag[m] - ti;
+                real[m] += tr; imag[m] += ti;
+                let nw = wr*wtr - wi*wti; wi = wr*wti + wi*wtr; wr = nw;
+            }
+        }
+    }
+}
+
+// --- LOAD AUDIO ---
+ui.drop.onclick = () => ui.fileIn.click();
+ui.drop.ondragover = e => { e.preventDefault(); ui.drop.classList.add('dragover'); };
+ui.drop.ondragleave = () => ui.drop.classList.remove('dragover');
+ui.drop.ondrop = e => { e.preventDefault(); ui.drop.classList.remove('dragover'); if(e.dataTransfer.files[0]) processAudio(e.dataTransfer.files[0]); };
+ui.fileIn.onchange = e => { if(e.target.files[0]) processAudio(e.target.files[0]); };
+
+async function processAudio(file) {
+    if(!file.type.match('audio/wav') && !file.type.match('audio/mpeg')) return alert('Iba WAV/MP3');
+    ui.info.innerHTML = `<span class="badge">Spracovávam...</span>`;
+    
+    if(!audioCtx) {
+        audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+        srcNode = audioCtx.createMediaElementSource(audioEl);
+        
+        // EQ
+        eqL = audioCtx.createBiquadFilter(); eqL.type='lowshelf'; eqL.frequency.value=250;
+        eqM = audioCtx.createBiquadFilter(); eqM.type='peaking'; eqM.frequency.value=1000; eqM.Q.value=1;
+        eqH = audioCtx.createBiquadFilter(); eqH.type='highshelf'; eqH.frequency.value=4000;
+        gainNode = audioCtx.createGain(); gainNode.gain.value = ui.slVol.value;
+        
+        // LIMITER (Ochrana proti clippingu)
+        // Analysers
+        anLive = audioCtx.createAnalyser(); anLive.fftSize=2048;
+        anPitch = audioCtx.createAnalyser(); anPitch.fftSize=4096;
+        
+        // Routing (Src -> EQ -> Gain -> Analyzers -> Dest)
+        srcNode.connect(eqL); eqL.connect(eqM); eqM.connect(eqH); eqH.connect(gainNode);
+        gainNode.connect(anLive);
+        gainNode.connect(anPitch);
+        gainNode.connect(audioCtx.destination);
+    }
+    audioEl.src = URL.createObjectURL(file);
+    
+    try {
+        ui.loadOff.style.display = 'flex';
+        const arrBuf = await file.arrayBuffer();
+        audioBuf = await audioCtx.decodeAudioData(arrBuf);
+        
+        ui.info.innerHTML = `<span class="badge">${file.name}</span> <span class="badge">${fTime(audioBuf.duration)}</span> <span class="badge">${audioBuf.sampleRate} Hz</span>`;
+        ui.txtDur.textContent = fTime(audioBuf.duration); ui.timeline.max = audioBuf.duration;
+        
+        waveZoom=1; waveOff=0; specZoomX=1; specZoomY=1; specOffX=0; markers=[];
+        [ui.slZoomW, ui.slZoomSX, ui.slZoomSY, ui.timeline, ui.btnPlay, ui.selLog, ui.slCont, ui.slGain, ui.selCam, ui.selQual, ui.selView, $('btnResEq'), $('btnExpW'), $('btnExpS'), $('btnExpJ'), ui.selSpecMode, ui.btnSpecPlay, ui.btnSpecPause, ui.btnSpecStop, ui.btnRefreshSpec].forEach(e => { if(e) e.disabled = false; });
+        ui.slZoomW.value=1; ui.slZoomSX.value=1; ui.slZoomSY.value=1; ui.slCont.value=1.2; ui.slGain.value=30;
+        
+        resize();
+        
+        setTimeout(async () => {
+            calcOfflineMetrics(audioBuf);
+            ui.loadOff.style.display = 'none';
+            await runFFTWorkflow(); // Spúšťa FFT generovanie
+            requestAnimationFrame(liveLoop);
+        }, 50);
+
+    } catch (e) { ui.loadOff.style.display='none'; alert('Chyba pri dekódovaní: '+e.message); }
+}
+
+// --- FFT WORKFLOW (Spúšťa sa aj pri zmene kvality) ---
+async function runFFTWorkflow() {
+    ui.loadSpec.style.display = 'flex';
+    const wasPlaying = isPlaying; if(wasPlaying) audioEl.pause();
+    
+    const q = ui.selQual.value;
+    specParams.fft = q==='fast'?1024 : (q==='high'?4096:2048);
+    specParams.hop = q==='fast'?1024 : (q==='high'?512:1024);
+    specParams.maxFrames = q==='fast'?1800 : (q==='high'?5000:3200);
+    
+    await generateFFT(audioBuf);
+    renderOffscreenMaps(); // Vykreslí Orig aj EQ (Aplikuje aj Pásmové filtre)
+    
+    drawWaveBase(); drawSpecBase(); drawOverlays();
+    ui.loadSpec.style.display = 'none';
+    if(wasPlaying) audioEl.play();
+}
+
+// Reagovanie na UI zmeny v Spectrograme
+ui.selQual.onchange = () => { if(audioBuf) runFFTWorkflow(); };
+const triggerSpecUpdate = () => { if(audioBuf) requestRenderEQ(); };
+ui.chkBass.onchange = triggerSpecUpdate;
+ui.chkMid.onchange = triggerSpecUpdate;
+ui.chkHigh.onchange = triggerSpecUpdate;
+if(ui.btnRefreshSpec) ui.btnRefreshSpec.onclick = () => { if(audioBuf) { renderOffscreenMaps(); drawSpecBase(); drawOverlays(); } }; 
+
+// --- OPRAVENÁ OFFLINE ANALÝZA A KLASIFIKÁCIA ---
+function getMonoData(buf) {
+    const left = buf.getChannelData(0);
+    if(buf.numberOfChannels < 2) return left;
+    const right = buf.getChannelData(1);
+    const mono = new Float32Array(left.length);
+    for(let i=0; i<left.length; i++) mono[i] = (left[i] + right[i]) * 0.5;
+    return mono;
+}
+
+function estimateBPMFromAudio(data, sr) {
+    // Prepracovaná BPM logika v9: multi-section onset envelope + autocorrelation + interval histogram.
+    // Cieľ: výrazne obmedziť half-time/double-time chyby (napr. 126->63, 160->80).
+    // Pozn.: bez referenčného BPM z metadát sa 100 % presnosť garantovať nedá, preto vraciame aj confidence a kandidátov.
+    if (!data || data.length < sr * 2 || !sr) return { bpm: 0, conf: 0, note: 'Príliš krátke audio' };
+
+    const minBpm = 60;
+    const maxBpm = 200;
+    const hopSec = 0.020;              // 20 ms: rýchlejšie a stabilnejšie než 10 ms pri dlhých skladbách
+    const hop = Math.max(256, Math.floor(sr * hopSec));
+    const win = Math.max(1024, Math.floor(sr * 0.060));
+
+    function percentile(arr, p) {
+        if (!arr.length) return 0;
+        const a = Array.from(arr).sort((x, y) => x - y);
+        return a[Math.min(a.length - 1, Math.max(0, Math.floor(a.length * p)))];
+    }
+
+    function median(values) {
+        if (!values.length) return 0;
+        const a = values.slice().sort((x, y) => x - y);
+        const m = Math.floor(a.length / 2);
+        return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+    }
+
+    // Použijeme viac častí skladby, aby intro/outro bez bicích nepokazili výsledok.
+    function buildSections() {
+        const dur = data.length / sr;
+        const sections = [];
+        const push = (a, b, weight) => {
+            a = clamp(a, 0, dur);
+            b = clamp(b, 0, dur);
+            if (b - a >= 8) sections.push({ start: Math.floor(a * sr), end: Math.floor(b * sr), weight });
+        };
+
+        // Hlavné časti: stred skladby a skoro celá skladba bez úplného začiatku/konca.
+        push(dur * 0.08, dur * 0.92, 1.00);
+        push(dur * 0.25, dur * 0.75, 1.15);
+        push(dur * 0.40, dur * 0.85, 1.05);
+
+        // Pri dlhých skladbách neprerátavaj viac než približne 120 s v jednej sekcii.
+        return sections.map(s => {
+            const maxLen = Math.floor(sr * 120);
+            if (s.end - s.start > maxLen) {
+                const mid = Math.floor((s.start + s.end) / 2);
+                s.start = Math.max(0, mid - Math.floor(maxLen / 2));
+                s.end = Math.min(data.length, s.start + maxLen);
+            }
+            return s;
+        });
+    }
+
+    function estimateSection(start, end, sectionWeight) {
+        const nFrames = Math.floor((end - start - win) / hop);
+        if (nFrames < 150) return null;
+
+        // 1) Obálka energie. Kombinujeme RMS, high-frequency proxy a transienty.
+        const rmsEnv = new Float32Array(nFrames);
+        const hfEnv = new Float32Array(nFrames);
+        const fluxEnv = new Float32Array(nFrames);
+
+        let prevRms = 0;
+        for (let f = 0; f < nFrames; f++) {
+            const off = start + f * hop;
+            let sum = 0;
+            let diffSum = 0;
+            let prev = data[off] || 0;
+
+            // podvzorkovanie vnútri okna pre výkon, ale stále dosť presné pre transienty
+            const step = win > 4096 ? 2 : 1;
+            let c = 0;
+            for (let i = 0; i < win && off + i < end; i += step) {
+                const v = data[off + i];
+                sum += v * v;
+                diffSum += Math.abs(v - prev);
+                prev = v;
+                c++;
+            }
+            const rms = Math.sqrt(sum / Math.max(1, c));
+            const hf = diffSum / Math.max(1, c);
+            rmsEnv[f] = Math.log1p(rms * 80);
+            hfEnv[f] = Math.log1p(hf * 260);
+            fluxEnv[f] = Math.max(0, rmsEnv[f] - prevRms);
+            prevRms = rmsEnv[f];
+        }
+
+        // 2) Lokálna normalizácia a novelty/onset curve.
+        const combo = new Float32Array(nFrames);
+        for (let i = 0; i < nFrames; i++) combo[i] = rmsEnv[i] * 0.45 + hfEnv[i] * 0.35 + fluxEnv[i] * 0.80;
+
+        const onsetRaw = new Float32Array(nFrames);
+        const localRadius = Math.round(0.35 / hopSec); // 350 ms lokálny baseline
+        for (let i = 1; i < nFrames; i++) {
+            let local = 0, cnt = 0;
+            for (let j = -localRadius; j <= localRadius; j++) {
+                const k = i + j;
+                if (k >= 0 && k < nFrames) { local += combo[k]; cnt++; }
+            }
+            local /= Math.max(1, cnt);
+            const rise = Math.max(0, combo[i] - combo[i - 1]);
+            const contrast = Math.max(0, combo[i] - local);
+            onsetRaw[i] = rise * 0.70 + contrast * 0.55;
+        }
+
+        const p50 = percentile(onsetRaw, 0.50);
+        const p85 = percentile(onsetRaw, 0.85);
+        const p95 = percentile(onsetRaw, 0.95);
+        const scale = Math.max(p95 - p50, p85 - p50, 1e-8);
+        const onset = new Float32Array(nFrames);
+        let onsetPow = 0;
+        for (let i = 0; i < nFrames; i++) {
+            const v = Math.max(0, (onsetRaw[i] - p50) / scale);
+            onset[i] = Math.min(5, v);
+            onsetPow += onset[i] * onset[i];
+        }
+        if (onsetPow < 1e-4) return null;
+
+        // 3) Peak picking pre interval histogram.
+        const peaks = [];
+        const minGap = Math.max(2, Math.round(0.075 / hopSec));
+        const thr = Math.max(0.18, percentile(onset, 0.74));
+        let last = -9999;
+        for (let i = 2; i < onset.length - 2; i++) {
+            if (onset[i] >= thr && onset[i] >= onset[i - 1] && onset[i] >= onset[i + 1] && i - last >= minGap) {
+                peaks.push({ i, v: onset[i] });
+                last = i;
+            }
+        }
+
+        const hist = new Float32Array((maxBpm - minBpm) * 2 + 1); // 0.5 BPM bins
+        for (let a = 0; a < peaks.length; a++) {
+            for (let b = a + 1; b < Math.min(peaks.length, a + 18); b++) {
+                const dt = (peaks[b].i - peaks[a].i) * hopSec;
+                if (dt < 0.25) continue;
+                if (dt > 2.0) break;
+                let bpm = 60 / dt;
+                while (bpm < minBpm) bpm *= 2;
+                while (bpm > maxBpm) bpm /= 2;
+                const w = Math.sqrt(peaks[a].v * peaks[b].v);
+                const add = (candidate, mul) => {
+                    if (candidate < minBpm || candidate > maxBpm) return;
+                    const idx = Math.round((candidate - minBpm) * 2);
+                    hist[idx] += w * mul;
+                };
+                add(bpm, 1.0);
+                add(bpm * 2, 0.70);   // silnejšie než predtým: rieši 80 -> 160
+                add(bpm / 2, 0.30);
+            }
+        }
+        let maxHist = 0;
+        for (let i = 0; i < hist.length; i++) maxHist = Math.max(maxHist, hist[i]);
+        if (maxHist > 0) for (let i = 0; i < hist.length; i++) hist[i] /= maxHist;
+
+        function corrAtBpm(bpm) {
+            const lag = Math.round((60 / bpm) / hopSec);
+            if (lag < 2 || lag >= onset.length * 0.75) return 0;
+            let dot = 0, a2 = 0, b2 = 0;
+            for (let i = 0; i < onset.length - lag; i++) {
+                const a = onset[i];
+                const b = onset[i + lag];
+                dot += a * b;
+                a2 += a * a;
+                b2 += b * b;
+            }
+            return dot / (Math.sqrt(a2 * b2) + 1e-9);
+        }
+
+        function pulseAtBpm(bpm) {
+            const period = (60 / bpm) / hopSec;
+            if (period < 2 || period > onset.length / 2) return 0;
+            const phases = 16;
+            const tol = Math.max(1, Math.round(period * 0.055));
+            let best = 0;
+            for (let p = 0; p < phases; p++) {
+                const phase = (p / phases) * period;
+                let sum = 0, count = 0;
+                for (let x = phase; x < onset.length; x += period) {
+                    const cx = Math.round(x);
+                    let local = 0;
+                    for (let k = -tol; k <= tol; k++) {
+                        const idx = cx + k;
+                        if (idx >= 0 && idx < onset.length) local = Math.max(local, onset[idx]);
+                    }
+                    sum += local;
+                    count++;
+                }
+                if (count > 6) best = Math.max(best, sum / count);
+            }
+            return best;
+        }
+
+        // 4) Kandidáti po 0.5 BPM, s harmonickou podporou.
+        const rows = [];
+        let maxCorr = 0, maxPulse = 0;
+        for (let bpm = minBpm; bpm <= maxBpm; bpm += 0.5) {
+            const corr = corrAtBpm(bpm) + 0.28 * corrAtBpm(bpm / 2) + 0.22 * corrAtBpm(bpm * 2) + 0.08 * corrAtBpm(bpm * 3);
+            const pulse = pulseAtBpm(bpm);
+            maxCorr = Math.max(maxCorr, corr);
+            maxPulse = Math.max(maxPulse, pulse);
+            rows.push({ bpm, corr, pulse, hist: hist[Math.round((bpm - minBpm) * 2)] || 0 });
+        }
+
+        const cand = [];
+        for (const r of rows) {
+            const corrN = maxCorr > 0 ? r.corr / maxCorr : 0;
+            const pulseN = maxPulse > 0 ? r.pulse / maxPulse : 0;
+            let score = corrN * 0.46 + pulseN * 0.34 + r.hist * 0.20;
+
+            // Priorita, ktorá rieši známe klubové/dance/EDM/dnb tempo rozsahy bez hardcodu na skladby.
+            if (r.bpm >= 118 && r.bpm <= 178) score *= 1.22;
+            if (r.bpm >= 150 && r.bpm <= 175) score *= 1.12;
+            if (r.bpm >= 70 && r.bpm < 95) score *= 0.88; // zabraňuje častému 160 -> 80
+            cand.push({ bpm: r.bpm, score, corr: corrN, pulse: pulseN, hist: r.hist, sectionWeight });
+        }
+
+        // vyhladenie skóre
+        for (let i = 1; i < cand.length - 1; i++) {
+            cand[i].score = cand[i].score * 0.65 + cand[i - 1].score * 0.175 + cand[i + 1].score * 0.175;
+        }
+        cand.sort((a, b) => b.score - a.score);
+        return { candidates: cand.slice(0, 24), onsetStrength: Math.sqrt(onsetPow / onset.length), peakCount: peaks.length };
+    }
+
+    // Zlúč výsledky zo sekcií.
+    const sections = buildSections();
+    const combined = new Map();
+    let validSections = 0;
+    for (const s of sections) {
+        const res = estimateSection(s.start, s.end, s.weight);
+        if (!res || !res.candidates.length) continue;
+        validSections++;
+        for (const c of res.candidates) {
+            const key = Math.round(c.bpm * 2) / 2;
+            const prev = combined.get(key) || { bpm: key, score: 0, hits: 0, corr: 0, pulse: 0, hist: 0 };
+            const w = s.weight;
+            prev.score += c.score * w;
+            prev.hits += 1;
+            prev.corr += c.corr;
+            prev.pulse += c.pulse;
+            prev.hist += c.hist;
+            combined.set(key, prev);
+        }
+    }
+
+    let candidates = Array.from(combined.values());
+    if (!candidates.length) return { bpm: 0, conf: 0, note: 'Slabý rytmus' };
+
+    // Priemerové hodnoty cez sekcie.
+    for (const c of candidates) {
+        c.score = c.score / Math.max(1, validSections);
+        c.corr = c.corr / Math.max(1, c.hits);
+        c.pulse = c.pulse / Math.max(1, c.hits);
+        c.hist = c.hist / Math.max(1, c.hits);
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+
+    function getNear(target, tol = 1.5) {
+        let best = null;
+        for (const c of candidates) {
+            if (Math.abs(c.bpm - target) <= tol && (!best || c.score > best.score)) best = c;
+        }
+        return best;
+    }
+
+    let best = candidates[0];
+
+    // Silná oprava half-time: 63->126, 80->160, 82.5->165.
+    if (best.bpm < 105) {
+        const dbl = getNear(best.bpm * 2, 2.0);
+        if (dbl && dbl.bpm >= 118 && dbl.bpm <= 200) {
+            const ratio = dbl.score / Math.max(best.score, 1e-9);
+            if (ratio >= 0.30 || dbl.pulse >= best.pulse * 0.48 || dbl.hist >= best.hist * 0.35) best = dbl;
+        }
+    }
+
+    // Ak je najlepší kandidát okolo 110, ale 165 existuje podobne silný (triplet/1.5x ambiguities), vyber podľa podpory.
+    const oneHalf = getNear(best.bpm * 1.5, 2.0);
+    if (oneHalf && oneHalf.bpm >= 150 && oneHalf.bpm <= 175 && oneHalf.score >= best.score * 0.58) best = oneHalf;
+
+    // Ak náhodou vyjde vysoký nezmysel, ale polovica je skoro rovnako silná, použi polovicu.
+    if (best.bpm > 185) {
+        const half = getNear(best.bpm / 2, 2.0);
+        if (half && half.score >= best.score * 0.72) best = half;
+    }
+
+    // Finálne zaokrúhlenie: vyhladaj lokálnu skupinu okolo víťaza a urob vážený priemer.
+    const group = candidates.filter(c => Math.abs(c.bpm - best.bpm) <= 2.0).slice(0, 12);
+    let wSum = 0, bSum = 0;
+    for (const c of group) {
+        const w = Math.max(0, c.score);
+        bSum += c.bpm * w;
+        wSum += w;
+    }
+    let finalBpm = wSum > 0 ? bSum / wSum : best.bpm;
+
+    // Porovnanie top kandidátov pre confidence.
+    candidates.sort((a, b) => b.score - a.score);
+    const topScore = best.score;
+    const other = candidates.filter(c => Math.abs(c.bpm - best.bpm) > 4).slice(0, 5);
+    const second = other[0] ? other[0].score : 0;
+    let conf = 45 + 55 * ((topScore - second) / Math.max(topScore, 1e-9));
+    conf += validSections >= 2 ? 8 : 0;
+    conf = clamp(Math.round(conf), 0, 98);
+
+    const topBpm = candidates.slice(0, 5).map(c => Math.round(c.bpm)).join('/');
+    if (conf < 28) return { bpm: 0, conf, note: 'Neisté, kandidáti ' + topBpm };
+    return { bpm: Math.round(finalBpm), conf, note: 'Kandidáti ' + topBpm };
+}
+
+function detectKeyMoments(buf, data) {
+    const sr = buf.sampleRate;
+    const winSec = 0.5;
+    const win = Math.max(256, Math.floor(sr * winSec));
+    const n = Math.floor(data.length / win);
+    if(n < 4) return [];
+    const env = [];
+    for(let i=0; i<n; i++) {
+        let sum=0, peak=0;
+        const off = i*win;
+        for(let j=0; j<win && off+j<data.length; j++) { const v=data[off+j]; sum += v*v; if(Math.abs(v)>peak) peak=Math.abs(v); }
+        env.push({ t:i*winSec, rms:Math.sqrt(sum/win), peak });
+    }
+    const vals = env.map(e=>e.rms).sort((a,b)=>a-b);
+    const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
+    const p35 = vals[Math.floor(vals.length*0.35)] || avg;
+    const p75 = vals[Math.floor(vals.length*0.75)] || avg;
+    const p90 = vals[Math.floor(vals.length*0.90)] || avg;
+    const moments = [];
+    const push = (type, cls, start, end, desc) => {
+        start = Math.max(0, start); end = Math.min(buf.duration, Math.max(end, start+1));
+        if(!moments.some(m => Math.abs(m.start-start) < 1.0 && m.type === type)) moments.push({type, cls, start, end, desc});
+    };
+
+    let introEnd = env.find(e => e.t > 3 && e.rms > p75)?.t || Math.min(12, buf.duration*0.08);
+    if(introEnd > 3 && introEnd < buf.duration*0.35) push('Intro', 'intro', 0, introEnd, 'Začiatočná časť pred výraznejším nástupom energie.');
+
+    let bestStart = 0, bestScore = -1;
+    const span = Math.max(4, Math.round(8 / winSec));
+    for(let i=0; i<=env.length-span; i++) {
+        let s=0; for(let j=0; j<span; j++) s += env[i+j].rms;
+        if(s > bestScore) { bestScore=s; bestStart=i; }
+    }
+    push('Najhlasnejšia časť', 'loud', env[bestStart].t, env[Math.min(env.length-1,bestStart+span)].t, 'Úsek s najvyššou priemernou RMS energiou.');
+
+    let inHigh=false, sHigh=0;
+    for(let i=0; i<env.length; i++) {
+        const high = env[i].rms >= p90;
+        if(high && !inHigh) { inHigh=true; sHigh=i; }
+        if((!high || i===env.length-1) && inHigh) {
+            const eIdx = high && i===env.length-1 ? i : i-1;
+            const dur = (eIdx-sHigh+1)*winSec;
+            if(dur >= 3) push('Drop / refrén', 'drop', env[sHigh].t, env[eIdx].t + winSec, 'Pravdepodobný energetický vrchol so stabilne vysokou hlasitosťou.');
+            inHigh=false;
+        }
+    }
+
+    let inQuiet=false, sQuiet=0;
+    for(let i=0; i<env.length; i++) {
+        const quiet = env[i].rms <= p35 * 0.8;
+        if(quiet && !inQuiet) { inQuiet=true; sQuiet=i; }
+        if((!quiet || i===env.length-1) && inQuiet) {
+            const eIdx = quiet && i===env.length-1 ? i : i-1;
+            const dur = (eIdx-sQuiet+1)*winSec;
+            if(dur >= 2.5) push('Tichá pasáž', 'quiet', env[sQuiet].t, env[eIdx].t + winSec, 'Pokles RMS energie oproti zvyšku skladby.');
+            inQuiet=false;
+        }
+    }
+
+    const diffs = [];
+    for(let i=1;i<env.length;i++) diffs.push({i, d:Math.abs(env[i].rms - env[i-1].rms)});
+    diffs.sort((a,b)=>b.d-a.d);
+    for(const x of diffs.slice(0,4)) {
+        if(x.d > Math.max(avg*0.22, 0.015)) push('Prechod', 'transition', env[x.i].t-1, env[x.i].t+2, 'Prudká zmena energie – možný nástup, break alebo prechod.');
+    }
+
+    return moments.sort((a,b)=>a.start-b.start).slice(0, 10);
+}
+
+function renderKeyMoments() {
+    if(!ui.keyMomentsList) return;
+    if(!keyMoments.length) {
+        ui.keyMomentsList.innerHTML = '<div class="moment-card"><strong>Nenašli sa výrazné momenty</strong><p>Audio je pravdepodobne príliš krátke alebo má veľmi rovnomernú dynamiku.</p></div>';
+        return;
+    }
+    ui.keyMomentsList.innerHTML = keyMoments.map((m, idx) => `
+        <div class="moment-card moment-${m.cls}">
+            <strong>${m.type}</strong>
+            <div class="moment-time">${fTime(m.start)} – ${fTime(m.end)}</div>
+            <p>${m.desc}</p>
+            <button class="outline" onclick="jumpTo(${m.start.toFixed(3)})">Prehrať odtiaľ</button>
+        </div>
+    `).join('');
+}
+
+function calcOfflineMetrics(buf) {
+    const d = getMonoData(buf); const sr = buf.sampleRate;
+    let sq=0, p=0, zcr=0, clip=0, pTime=0;
+    for(let i=0; i<d.length; i++) {
+        const v=d[i], a=Math.abs(v); sq+=v*v;
+        if(a>p) { p=a; pTime=i/sr; }
+        if(a>=0.99) clip++;
+        if(i>0 && ((v>=0 && d[i-1]<0)||(v<0 && d[i-1]>=0))) zcr++;
+    }
+    const rms = Math.sqrt(sq/d.length);
+    const zcrSec = zcr / (d.length/sr);
+    const dyn = (20*Math.log10(Math.max(p, 0.0001))) - (20*Math.log10(Math.max(rms, 0.0001)));
+    const crest = p / Math.max(rms, 0.0001);
+    const lufs = -0.691 + (10 * Math.log10(Math.max(rms*rms, 0.00001)));
+    const bpmResult = estimateBPMFromAudio(d, sr);
+    const bpm = bpmResult.bpm, bpmConf = bpmResult.conf;
+
+    keyMoments = detectKeyMoments(buf, d);
+    renderKeyMoments();
+
+    offStats = { rms, p, dyn, crest, zcrSec, lufs, bpm, bpmConf, clip, pTime, keyMoments };
+
+    $('valLufs').textContent = lufs.toFixed(1); $('valDyn').textContent = dyn.toFixed(1) + " dB";
+    $('valPeak').textContent = p.toFixed(3); $('valCrest').textContent = crest.toFixed(2);
+    $('valZcr').textContent = Math.round(zcrSec); 
+    $('valBpm').textContent = bpm ? `${Math.round(bpm)} BPM` : "BPM neisté";
+    $('valBpmConf').textContent = bpm ? `Spoľahlivosť: ${bpmConf}% (${bpmResult.note})` : "Ťažko určiť rytmus";
+    $('warnClip').style.display = clip > 100 ? 'block' : 'none';
+
+    waveCache = []; const wStep = Math.max(1, Math.floor(sr/200));
+    for(let i=0; i<d.length; i+=wStep) {
+        let mn=1, mx=-1; for(let j=0; j<wStep && i+j<d.length; j++){ if(d[i+j]<mn)mn=d[i+j]; if(d[i+j]>mx)mx=d[i+j]; }
+        waveCache.push({min:mn, max:mx});
+    }
+}
+
+// --- FFT GENERÁCIA ---
+async function generateFFT(buf) {
+    specData = [];
+    const d = getMonoData(buf); const n = specParams.fft; 
+    let actualHop = specParams.hop;
+    if(d.length / actualHop > specParams.maxFrames) actualHop = Math.ceil(d.length / specParams.maxFrames); 
+    
+    const frames = Math.floor(d.length / actualHop);
+    const hann = new Float32Array(n); for(let i=0; i<n; i++) hann[i] = 0.5 * (1 - Math.cos(2*Math.PI*i/(n-1)));
+    
+    let centSum=0, flatSum=0;
+
+    for(let f=0; f<frames; f++) {
+        let r=new Float32Array(n), im=new Float32Array(n);
+        let off = f*actualHop;
+        for(let i=0; i<n; i++) if(off+i<d.length) r[i] = d[off+i]*hann[i];
+        jsFFT(r, im);
+        
+        let row = new Uint8Array(n/2);
+        let magSum=0, wSum=0, logSum=0;
+        for(let i=0; i<n/2; i++) {
+            let mag = Math.sqrt(r[i]*r[i] + im[i]*im[i]);
+            magSum += mag; wSum += mag * i;
+            if(mag>0) logSum += Math.log(mag);
+            // Zápis mapovaný na 0-255 pre zrýchlenie renderingu. 1 dB = ~2.8 pixel step
+            let db = 20 * Math.log10(Math.max(mag, 0.0001));
+            row[i] = Math.max(0, Math.min(255, (db + 90) * 2.8)); 
+        }
+        specData.push(row);
+        
+        if(magSum>0) { centSum += (wSum/magSum); flatSum += (Math.exp(logSum/(n/2)) / (magSum/(n/2))); }
+        
+        if(f%150===0) {
+            const pc = Math.round((f/frames)*100);
+            ui.txtLS.textContent = `Vypočítavam FFT maticu... ${pc}%`; ui.barS.style.width = pc+'%';
+            await new Promise(res => requestAnimationFrame(res));
+        }
+    }
+    
+    const avgCentBin = centSum/frames; const avgHz = (avgCentBin/(n/2)) * (buf.sampleRate/2);
+    const avgFlat = flatSum/frames;
+    $('valCent').textContent = Math.round(avgHz) + " Hz"; $('valFlat').textContent = avgFlat.toFixed(4);
+    
+    // INTELIGENTNÁ KLASIFIKÁCIA ZVUKU
+    let type = "Neznáme";
+    const bpmConf = offStats.bpmConf || 0;
+    const bpm = offStats.bpm || 0;
+    offStats.avgHz = avgHz;
+    offStats.avgFlat = avgFlat;
+    if (bpmConf > 45 && bpm >= 118 && bpm <= 150 && offStats.crest < 20) {
+        type = "Pop / Dance / EDM";
+    } else if (bpmConf > 40 && bpm >= 150 && bpm <= 180) {
+        type = "DnB / Rýchla hudba";
+    } else if (bpmConf > 45) {
+        type = "Hudba s jasným rytmom";
+    } else if (offStats.zcrSec > 3500 && avgFlat > 0.06) {
+        type = "Šum / Perkusívny zvuk";
+    } else if (offStats.dyn > 22 && bpmConf < 35) {
+        type = "Ambient / Klasika / Dynamická nahrávka";
+    } else if (avgFlat > 0.055 && offStats.crest > 10) {
+        type = "Hovorené slovo alebo perkusie";
+    } else {
+        type = "Hudba / Iné";
+    }
+    $('valGenre').textContent = type;
+    generateSummaryText();
+}
+
+function generateSummaryText() {
+    let t = `Skladba má `;
+    if(offStats.bpmConf > 50) t += `tanečný/pravidelný rytmus okolo ${Math.round(offStats.bpm)} BPM. `;
+    else t += `voľnejší alebo nepravidelný rytmus. `;
+    
+    if(offStats.lufs > -10) t += `Hlasitosť je veľmi vysoká (${offStats.lufs.toFixed(1)} LUFS). `;
+    else if(offStats.lufs > -16) t += `Hlasitosť je v štandardnom rozsahu. `;
+    else t += `Hlasitosť je skôr tichšia. `;
+    
+    t += `Charakter zvuku sa radí do kategórie "${$('valGenre').textContent}".`;
+    if(offStats.clip > 100) t += ` Pozor, v zázname bol detegovaný výrazný clipping (skreslenie pôvodného súboru).`;
+    $('summaryText').textContent = t;
+}
+
+// --- RENDER OFFSCREEN MATÍC (Orig, EQ, Aplikácia Filtrov pásiem) ---
+function renderOffscreenMaps() {
+    if(!specData.length) return;
+    const w = specData.length, h = specData[0].length;
+    offscreenOrig.width = w; offscreenOrig.height = h;
+    offscreenEQ.width = w; offscreenEQ.height = h;
+    
+    const imgO = offCtxOrig.createImageData(w, h); const dO = new Uint32Array(imgO.data.buffer);
+    const imgE = offCtxEQ.createImageData(w, h);   const dE = new Uint32Array(imgE.data.buffer);
+    
+    const cont = parseFloat(ui.slCont.value), gain = parseFloat(ui.slGain.value);
+    const isLog = ui.selLog.value === 'log';
+    
+    // EQ dB to visual gain (2.8 pixels per dB mapovanie v FFT)
+    const gL = parseFloat($('eqL').value) * 2.8;
+    const gM = parseFloat($('eqM').value) * 2.8;
+    const gH = parseFloat($('eqH').value) * 2.8;
+
+    // Filters
+    const showB = ui.chkBass.checked;
+    const showM = ui.chkMid.checked;
+    const showH = ui.chkHigh.checked;
+    
+    const srNyquist = audioBuf.sampleRate / 2;
+    const b250 = Math.floor((250/srNyquist)*h);
+    const b4000 = Math.floor((4000/srNyquist)*h);
+
+    for(let x=0; x<w; x++) {
+        const col = specData[x];
+        for(let y=0; y<h; y++) {
+            let srcY = h - 1 - y; // Obrátené Y (0 je dole, h-1 je hore)
+            if(isLog) {
+                const minF = 20; const f = minF * Math.pow(srNyquist/minF, (h - 1 - y)/(h-1));
+                srcY = Math.floor((f / srNyquist) * h);
+                if(srcY>=h) srcY = h-1; if(srcY<0) srcY=0;
+            }
+            
+            let v = col[srcY];
+
+            // Frekvenčný Filter (Maska)
+            let freq = (srcY / h) * srNyquist;
+            let visible = true;
+            if(freq <= 250 && !showB) visible = false;
+            else if(freq > 250 && freq <= 4000 && !showM) visible = false;
+            else if(freq > 4000 && !showH) visible = false;
+
+            if(!visible) v = v * 0.1; // Výrazné stmavenie pri vypnutom filtri
+            
+            // Orig Render
+            let vO = Math.max(0, Math.min(255, (v + gain - 30) * cont));
+            dO[y*w + x] = colormap[Math.floor(vO)];
+            
+            // EQ Simulation
+            let eqAdd = 0;
+            if(srcY < b250) eqAdd = gL; else if(srcY < b4000) eqAdd = gM; else eqAdd = gH;
+            
+            let vE = Math.max(0, Math.min(255, v + eqAdd));
+            vE = Math.max(0, Math.min(255, (vE + gain - 30) * cont));
+            dE[y*w + x] = colormap[Math.floor(vE)];
+        }
+    }
+    offCtxOrig.putImageData(imgO, 0, 0);
+    offCtxEQ.putImageData(imgE, 0, 0);
+}
+
+// Request Offscreen Render (Používa sa pri zmene EQ bez blokovania UI)
+function requestRenderEQ() {
+    if(renderReqId) cancelAnimationFrame(renderReqId);
+    renderReqId = requestAnimationFrame(() => { renderOffscreenMaps(); drawSpecBase(); drawOverlays(); });
+}
+
+// --- KRESLENIE ---
+function drawWaveBase() {
+    if(!waveCache.length) return;
+    const w = ctxWB.canvas.width, h = ctxWB.canvas.height;
+    ctxWB.fillStyle='#0b0c10'; ctxWB.fillRect(0,0,w,h);
+    
+    const visDur = audioBuf.duration / waveZoom;
+    if(waveOff < 0) waveOff = 0; if(waveOff+visDur > audioBuf.duration) waveOff = Math.max(0, audioBuf.duration-visDur);
+    
+    const sI = Math.floor((waveOff/audioBuf.duration)*waveCache.length);
+    const eI = Math.floor(((waveOff+visDur)/audioBuf.duration)*waveCache.length);
+    const step = Math.max(1, (eI-sI)/w);
+    
+    const g = ctxWB.createLinearGradient(0,0,0,h);
+    g.addColorStop(0, '#5f27cd'); g.addColorStop(0.5, '#66fcf1'); g.addColorStop(1, '#ff9f43');
+    ctxWB.beginPath(); ctxWB.strokeStyle=g; ctxWB.lineWidth=1.5;
+    
+    for(let i=0; i<w; i++) {
+        let mn=1, mx=-1; const s = Math.floor(sI+i*step), e = Math.floor(sI+(i+1)*step);
+        for(let k=s; k<e&&k<waveCache.length; k++) { if(waveCache[k].min<mn)mn=waveCache[k].min; if(waveCache[k].max>mx)mx=waveCache[k].max; }
+        if(mn<=mx) { ctxWB.moveTo(i, (mn+1)/2*h); ctxWB.lineTo(i, (mx+1)/2*h); }
+    }
+    ctxWB.stroke();
+}
+
+
+function getVisualSpecValue(frameIdx, binIdx, eqMode=false) {
+    if(!specData.length) return 0;
+    const h = specData[0].length;
+    frameIdx = clamp(Math.floor(frameIdx), 0, specData.length-1);
+    binIdx = clamp(Math.floor(binIdx), 0, h-1);
+    let v = specData[frameIdx][binIdx];
+    const srNyquist = audioBuf.sampleRate / 2;
+    const freq = (binIdx / h) * srNyquist;
+    if(freq <= 250 && !ui.chkBass.checked) v *= 0.1;
+    else if(freq > 250 && freq <= 4000 && !ui.chkMid.checked) v *= 0.1;
+    else if(freq > 4000 && !ui.chkHigh.checked) v *= 0.1;
+    if(eqMode) {
+        const gL = parseFloat($('eqL').value) * 2.8;
+        const gM = parseFloat($('eqM').value) * 2.8;
+        const gH = parseFloat($('eqH').value) * 2.8;
+        if(freq < 250) v += gL; else if(freq < 4000) v += gM; else v += gH;
+    }
+    const cont = parseFloat(ui.slCont.value), gain = parseFloat(ui.slGain.value);
+    return clamp((v + gain - 30) * cont, 0, 255);
+}
+
+function drawSpec3D() {
+    if(!specData.length) return;
+    const w = ctxSB.canvas.width, h = ctxSB.canvas.height;
+    ctxSB.fillStyle = '#000'; ctxSB.fillRect(0,0,w,h);
+    const visDur = audioBuf.duration / specZoomX;
+    if(specOffX < 0) specOffX = 0; if(specOffX+visDur > audioBuf.duration) specOffX = Math.max(0, audioBuf.duration-visDur);
+    const startFrame = Math.floor((specOffX / audioBuf.duration) * specData.length);
+    const endFrame = Math.max(startFrame+1, Math.floor(((specOffX + visDur) / audioBuf.duration) * specData.length));
+    const bins = specData[0].length;
+    const maxBin = Math.max(8, Math.floor(bins / specZoomY));
+    const timeLines = Math.min(110, endFrame - startFrame);
+    const binPoints = Math.min(80, maxBin);
+    const left = 28, bottom = h * 0.88, plotW = w * 0.78, plotH = h * 0.58, skew = w * 0.19;
+    const eqMode = ui.selView.value === 'eq' || ui.selView.value === 'split';
+
+    ctxSB.lineWidth = 1;
+    for(let ti=timeLines-1; ti>=0; ti--) {
+        const frameIdx = startFrame + Math.floor((ti / Math.max(1, timeLines-1)) * (endFrame - startFrame - 1));
+        ctxSB.beginPath();
+        for(let bi=0; bi<binPoints; bi++) {
+            const binIdx = Math.floor((bi / Math.max(1, binPoints-1)) * maxBin);
+            const intensity = getVisualSpecValue(frameIdx, binIdx, eqMode);
+            const tRatio = ti / Math.max(1, timeLines-1);
+            const fRatio = bi / Math.max(1, binPoints-1);
+            const x = left + tRatio * plotW + fRatio * skew;
+            const y = bottom - fRatio * plotH - (intensity / 255) * h * 0.22;
+            if(bi === 0) ctxSB.moveTo(x, y); else ctxSB.lineTo(x, y);
+        }
+        const hue = 190 + Math.floor(120 * (ti / Math.max(1,timeLines-1)));
+        ctxSB.strokeStyle = `hsla(${hue}, 90%, 58%, 0.75)`;
+        ctxSB.stroke();
+    }
+    ctxSB.fillStyle = 'rgba(255,255,255,0.78)'; ctxSB.font = '11px monospace';
+    ctxSB.fillText('3D: X = čas, Y = frekvencia, výška = intenzita', 12, 18);
+}
+
+function drawSpecBase() {
+    if(!specData.length) return;
+    if(ui.selSpecMode && ui.selSpecMode.value === '3d') { drawSpec3D(); return; }
+    const w = ctxSB.canvas.width, h = ctxSB.canvas.height;
+    ctxSB.fillStyle='#0b0c10'; ctxSB.fillRect(0,0,w,h);
+    
+    const visDur = audioBuf.duration / specZoomX;
+    if(specOffX < 0) specOffX = 0; if(specOffX+visDur > audioBuf.duration) specOffX = Math.max(0, audioBuf.duration-visDur);
+    
+    const sx = (specOffX / audioBuf.duration) * offscreenOrig.width;
+    const sw = (visDur / audioBuf.duration) * offscreenOrig.width;
+    
+    const sh = offscreenOrig.height / specZoomY;
+    const sy = offscreenOrig.height - sh; // Orez odspodu pre zoom
+    
+    const mode = ui.selView.value;
+    
+    if(mode === 'orig') {
+        ctxSB.drawImage(offscreenOrig, sx, Math.max(0,sy), Math.max(1,sw), Math.max(1,sh), 0, 0, w, h);
+    } else if(mode === 'eq') {
+        ctxSB.drawImage(offscreenEQ, sx, Math.max(0,sy), Math.max(1,sw), Math.max(1,sh), 0, 0, w, h);
+    } else if(mode === 'split') {
+        const h2 = h/2;
+        ctxSB.drawImage(offscreenOrig, sx, Math.max(0,sy), Math.max(1,sw), Math.max(1,sh), 0, 0, w, h2);
+        ctxSB.drawImage(offscreenEQ, sx, Math.max(0,sy), Math.max(1,sw), Math.max(1,sh), 0, h2, w, h2);
+        
+        ctxSB.beginPath(); ctxSB.moveTo(0, h2); ctxSB.lineTo(w, h2);
+        ctxSB.strokeStyle = 'rgba(255,255,255,0.4)'; ctxSB.lineWidth = 2; ctxSB.stroke();
+        
+        ctxSB.fillStyle = 'rgba(0,0,0,0.6)'; ctxSB.fillRect(5, 5, 80, 20); ctxSB.fillRect(5, h2+5, 80, 20);
+        ctxSB.fillStyle = '#fff'; ctxSB.font = '11px sans-serif';
+        ctxSB.fillText('Pôvodný', 10, 19); ctxSB.fillText('Po EQ', 10, h2+19);
+    }
+}
+
+function drawOverlays() {
+    if(!audioBuf) return;
+    const wW = ctxWO.canvas.width, hW = ctxWO.canvas.height;
+    const wS = ctxSO.canvas.width, hS = ctxSO.canvas.height;
+    ctxWO.clearRect(0,0,wW,hW); ctxSO.clearRect(0,0,wS,hS);
+    
+    const cur = audioEl.currentTime;
+    
+    // Playhead Wave
+    const visDurW = audioBuf.duration / waveZoom;
+    const pXW = ((cur - waveOff)/visDurW)*wW;
+    if(pXW>=0 && pXW<=wW) { ctxWO.beginPath(); ctxWO.strokeStyle='var(--danger)'; ctxWO.lineWidth=2; ctxWO.moveTo(pXW,0); ctxWO.lineTo(pXW,hW); ctxWO.stroke(); }
+    
+    // Playhead Spec
+    const visDurS = audioBuf.duration / specZoomX;
+    const pXS = ((cur - specOffX)/visDurS)*wS;
+    if(pXS>=0 && pXS<=wS) { ctxSO.beginPath(); ctxSO.strokeStyle='rgba(255,71,87,0.8)'; ctxSO.lineWidth=2; ctxSO.moveTo(pXS,0); ctxSO.lineTo(pXS,hS); ctxSO.stroke(); }
+
+    // Kľúčové momenty vo waveforme a spektrograme
+    if(keyMoments && keyMoments.length) {
+        const colors = { intro:'#66fcf1', drop:'#ff9f43', quiet:'#5f27cd', loud:'#ff4757', transition:'#1dd1a1' };
+        keyMoments.forEach(m => {
+            const c = colors[m.cls] || '#66fcf1';
+            const wx = ((m.start - waveOff)/visDurW)*wW;
+            if(wx>=0 && wx<=wW) { ctxWO.beginPath(); ctxWO.strokeStyle=c; ctxWO.lineWidth=1.5; ctxWO.setLineDash([4,3]); ctxWO.moveTo(wx,0); ctxWO.lineTo(wx,hW); ctxWO.stroke(); ctxWO.setLineDash([]); }
+            const sxm = ((m.start - specOffX)/visDurS)*wS;
+            if(sxm>=0 && sxm<=wS) { ctxSO.beginPath(); ctxSO.strokeStyle=c; ctxSO.lineWidth=1.5; ctxSO.setLineDash([4,3]); ctxSO.moveTo(sxm,0); ctxSO.lineTo(sxm,hS); ctxSO.stroke(); ctxSO.setLineDash([]); ctxSO.fillStyle=c; ctxSO.fillText(m.type, sxm+3, 14); }
+        });
+    }
+    
+    // Spektrogram Mriežka
+    ctxSO.fillStyle = 'rgba(255,255,255,0.7)'; ctxSO.font = '10px monospace'; ctxSO.strokeStyle = 'rgba(255,255,255,0.1)';
+    const freqs = [20, 50, 100, 250, 500, 1000, 2000, 4000, 10000, 20000];
+    const maxF = audioBuf.sampleRate/2;
+    const isLog = ui.selLog.value === 'log';
+    const maxDrawF = isLog ? (20 * Math.pow(maxF/20, 1/specZoomY)) : (maxF / specZoomY);
+    
+    // Zohľadnenie split view pre os Y
+    const isSplit = ui.selView.value === 'split';
+    const drawYAxis = (hOffset, hRegion) => {
+        ctxSO.beginPath();
+        freqs.forEach(f => {
+            if(f <= maxDrawF) {
+                let py = 0;
+                if(isLog) {
+                    const minL = Math.log(20), maxL = Math.log(maxDrawF);
+                    py = hRegion - ((Math.log(f) - minL)/(maxL - minL))*hRegion;
+                } else { py = hRegion - (f/maxDrawF)*hRegion; }
+                if(py >= 0 && py <= hRegion) {
+                    ctxSO.moveTo(0, hOffset + py); ctxSO.lineTo(wS, hOffset + py);
+                    ctxSO.fillText(f>=1000 ? (f/1000)+'k' : f, 5, hOffset + py - 2);
+                }
+            }
+        });
+        ctxSO.stroke();
+    };
+
+    if(isSplit) { drawYAxis(0, hS/2); drawYAxis(hS/2, hS/2); }
+    else { drawYAxis(0, hS); }
+    
+    // Časová Os X
+    const tStep = visDurS > 60 ? 10 : (visDurS > 10 ? 5 : 1);
+    const sT = Math.ceil(specOffX/tStep)*tStep;
+    ctxSO.beginPath();
+    for(let t=sT; t<specOffX+visDurS; t+=tStep) {
+        const px = ((t-specOffX)/visDurS)*wS;
+        ctxSO.moveTo(px, 0); ctxSO.lineTo(px, hS);
+        ctxSO.fillText(fTime(t).substring(0,5), px+2, hS-5);
+    }
+    ctxSO.stroke();
+}
+
+
+// --- HOVER HODNOTY NAD GRAFMI ---
+function formatFreq(freq) {
+    if(!isFinite(freq)) return '--';
+    return freq >= 1000 ? (freq/1000).toFixed(2) + ' kHz' : Math.round(freq) + ' Hz';
+}
+function specFreqFromY(y, height) {
+    const maxF = audioBuf.sampleRate / 2;
+    const maxDrawF = ui.selLog.value === 'log' ? (20 * Math.pow(maxF/20, 1/specZoomY)) : (maxF / specZoomY);
+    if(ui.selLog.value === 'log') {
+        const minL = Math.log(20), maxL = Math.log(maxDrawF);
+        return Math.exp(maxL - (y/height) * (maxL - minL));
+    }
+    return maxDrawF - (y/height) * maxDrawF;
+}
+function showTip(el, x, y, html) {
+    if(!el) return;
+    el.innerHTML = html;
+    el.style.display = 'block';
+    el.style.left = (x + 14) + 'px';
+    el.style.top = (y + 14) + 'px';
+}
+function hideTip(el) { if(el) el.style.display = 'none'; }
+
+ui.wrapW.addEventListener('mousemove', e => {
+    if(!audioBuf || !waveCache.length) return;
+    const rect = ui.wrapW.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const t = waveOff + (x / rect.width) * (audioBuf.duration / waveZoom);
+    const idx = clamp(Math.floor((t / audioBuf.duration) * waveCache.length), 0, waveCache.length-1);
+    const wc = waveCache[idx] || {min:0, max:0};
+    showTip(ui.waveTip, x, y, `Čas: ${fTime(t)}<br>Peak: ${Math.max(Math.abs(wc.min), Math.abs(wc.max)).toFixed(3)}`);
+});
+ui.wrapW.addEventListener('mouseleave', () => hideTip(ui.waveTip));
+
+ui.wrapS.addEventListener('mousemove', e => {
+    if(!audioBuf || !specData.length) return;
+    const rect = ui.wrapS.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const t = specOffX + (x / rect.width) * (audioBuf.duration / specZoomX);
+    let regionY = y, regionH = rect.height;
+    if(ui.selView.value === 'split') {
+        regionH = rect.height / 2;
+        regionY = y > regionH ? y - regionH : y;
+    }
+    const freq = clamp(specFreqFromY(regionY, regionH), 20, audioBuf.sampleRate/2);
+    const frameIdx = clamp(Math.floor((t/audioBuf.duration) * specData.length), 0, specData.length-1);
+    const binIdx = clamp(Math.floor((freq/(audioBuf.sampleRate/2)) * specData[0].length), 0, specData[0].length-1);
+    const intensity = getVisualSpecValue(frameIdx, binIdx, ui.selView.value !== 'orig');
+    const approxDb = (specData[frameIdx][binIdx] / 2.8) - 90;
+    showTip(ui.specTip, x, y, `Čas: ${fTime(t)}<br>Frekvencia: ${formatFreq(freq)}<br>Intenzita: ${Math.round(intensity)}/255<br>Odhad: ${approxDb.toFixed(1)} dB`);
+});
+ui.wrapS.addEventListener('mouseleave', () => hideTip(ui.specTip));
+
+// --- LIVE LOOP ---
+function liveLoop() {
+    if(isPlaying && audioBuf) {
+        if(!isDraggingTime) ui.timeline.value = audioEl.currentTime;
+        ui.txtTime.textContent = fTime(audioEl.currentTime);
+        
+        const mode = ui.selCam.value;
+        if(mode === 'page') {
+            const visW = audioBuf.duration / waveZoom; if(audioEl.currentTime > waveOff + visW*0.9) { waveOff = audioEl.currentTime - visW*0.1; drawWaveBase(); }
+            const visS = audioBuf.duration / specZoomX; if(audioEl.currentTime > specOffX + visS*0.9) { specOffX = audioEl.currentTime - visS*0.1; drawSpecBase(); }
+        } else {
+            const visW = audioBuf.duration / waveZoom; waveOff = audioEl.currentTime - visW/2; drawWaveBase();
+            const visS = audioBuf.duration / specZoomX; specOffX = audioEl.currentTime - visS/2; drawSpecBase();
+        }
+        
+        drawOverlays(); liveMetrics();
+    }
+    requestAnimationFrame(liveLoop);
+}
+
+// --- UI EVENTS ---
+function togglePlay() { if(audioCtx.state==='suspended') audioCtx.resume(); isPlaying ? audioEl.pause() : audioEl.play(); }
+ui.btnPlay.onclick = togglePlay;
+if(ui.btnSpecPlay) ui.btnSpecPlay.onclick = () => { if(audioCtx.state==='suspended') audioCtx.resume(); audioEl.play(); };
+if(ui.btnSpecPause) ui.btnSpecPause.onclick = () => audioEl.pause();
+if(ui.btnSpecStop) ui.btnSpecStop.onclick = () => { audioEl.pause(); jumpTo(0); };
+audioEl.onplay = () => { isPlaying=true; ui.btnPlay.textContent="⏸ Pause"; };
+audioEl.onpause = () => { isPlaying=false; ui.btnPlay.textContent="▶ Play"; };
+
+ui.timeline.oninput = () => { isDraggingTime=true; audioEl.currentTime=ui.timeline.value; drawOverlays(); };
+ui.timeline.onchange = () => isDraggingTime=false;
+ui.slVol.oninput = e => { if(gainNode) gainNode.gain.value=e.target.value; };
+
+function jumpTo(t) { t=clamp(t,0,audioBuf.duration); audioEl.currentTime=t; ui.timeline.value=t; drawOverlays(); }
+
+ui.slZoomW.oninput = e => { const oldDur = audioBuf.duration/waveZoom; const focus = (audioEl.currentTime>=waveOff && audioEl.currentTime<=waveOff+oldDur) ? audioEl.currentTime : waveOff + oldDur/2; waveZoom=parseFloat(e.target.value); const newDur = audioBuf.duration/waveZoom; waveOff = focus - newDur/2; drawWaveBase(); drawOverlays(); };
+ui.wrapW.onmousedown = e => { if(e.shiftKey) { isDragW=true; stDragW=e.clientX; stOffW=waveOff; ui.wrapW.style.cursor='grabbing'; } else jumpTo(waveOff + (e.offsetX/ui.wrapW.clientWidth)*(audioBuf.duration/waveZoom)); };
+ui.wrapW.onwheel = e => { e.preventDefault(); const ratio = e.offsetX / ui.wrapW.clientWidth; const oldDur = audioBuf.duration / waveZoom; const timeAtCursor = waveOff + ratio * oldDur; waveZoom = clamp(waveZoom * (e.deltaY<0?1.2:0.8), 1, 50); ui.slZoomW.value = waveZoom; const newDur = audioBuf.duration / waveZoom; waveOff = timeAtCursor - ratio * newDur; drawWaveBase(); drawOverlays(); };
+
+ui.slZoomSX.oninput = e => { const oldDur = audioBuf.duration/specZoomX; const focus = (audioEl.currentTime>=specOffX && audioEl.currentTime<=specOffX+oldDur) ? audioEl.currentTime : specOffX + oldDur/2; specZoomX=parseFloat(e.target.value); const newDur = audioBuf.duration/specZoomX; specOffX = focus - newDur/2; drawSpecBase(); drawOverlays(); };
+ui.slZoomSY.oninput = e => { specZoomY=parseFloat(e.target.value); drawSpecBase(); drawOverlays(); };
+ui.wrapS.onmousedown = e => { if(e.shiftKey) { isDragS=true; stDragS=e.clientX; stOffS=specOffX; ui.wrapS.style.cursor='grabbing'; } else jumpTo(specOffX + (e.offsetX/ui.wrapS.clientWidth)*(audioBuf.duration/specZoomX)); };
+ui.wrapS.onwheel = e => { e.preventDefault(); if(e.shiftKey){ ui.slZoomSY.value=clamp(specZoomY*(e.deltaY<0?1.2:0.8),1,8); ui.slZoomSY.dispatchEvent(new Event('input')); } else { const ratio = e.offsetX / ui.wrapS.clientWidth; const oldDur = audioBuf.duration / specZoomX; const timeAtCursor = specOffX + ratio * oldDur; specZoomX = clamp(specZoomX*(e.deltaY<0?1.2:0.8),1,50); ui.slZoomSX.value = specZoomX; const newDur = audioBuf.duration / specZoomX; specOffX = timeAtCursor - ratio * newDur; drawSpecBase(); drawOverlays(); } };
+
+window.onmousemove = e => {
+    if(isDragW) { waveOff = stOffW - (e.clientX-stDragW)*(audioBuf.duration/waveZoom)/ui.wrapW.clientWidth; drawWaveBase(); drawOverlays(); }
+    if(isDragS) { specOffX = stOffS - (e.clientX-stDragS)*(audioBuf.duration/specZoomX)/ui.wrapS.clientWidth; drawSpecBase(); drawOverlays(); }
+};
+window.onmouseup = () => { isDragW=isDragS=false; ui.wrapW.style.cursor='text'; ui.wrapS.style.cursor='crosshair'; };
+
+ui.selLog.onchange = () => { renderOffscreenMaps(); drawSpecBase(); drawOverlays(); };
+ui.slCont.onchange = () => { renderOffscreenMaps(); drawSpecBase(); };
+ui.slGain.onchange = () => { renderOffscreenMaps(); drawSpecBase(); };
+ui.selView.onchange = () => { drawSpecBase(); drawOverlays(); };
+if(ui.selSpecMode) ui.selSpecMode.onchange = () => { drawSpecBase(); drawOverlays(); };
+
+// --- LIVE METRICS ---
+const pBuf = new Float32Array(4096), fBuf = new Uint8Array(1024), lRmsBuf = new Float32Array(2048);
+function liveMetrics() {
+    anLive.getByteFrequencyData(fBuf);
+    const maxF = audioCtx.sampleRate / 2; let bE=0, mE=0, hE=0;
+    const peaks=[];
+    for(let i=0; i<fBuf.length; i++){ const f = (i/fBuf.length)*maxF; if(f < 250) bE += fBuf[i]; else if(f < 4000) mE += fBuf[i]; else hE += fBuf[i]; if(i>1 && i<fBuf.length-2 && fBuf[i]>fBuf[i-1] && fBuf[i]>fBuf[i+1] && fBuf[i]>25) peaks.push({f, v:fBuf[i]}); }
+    peaks.sort((a,b)=>b.v-a.v);
+    if($('lTopFreqs')) $('lTopFreqs').innerHTML = [0,1,2].map(i => peaks[i] ? Math.round(peaks[i].f)+' Hz' : '--').join('<br>');
+    const totE = Math.max(1, bE+mE+hE); const bp = (bE/totE)*100, mp = (mE/totE)*100, hp = (hE/totE)*100;
+    $('barBass').style.width=bp+'%'; $('barMid').style.width=mp+'%'; $('barHigh').style.width=hp+'%';
+    
+    let dom = "Vyvážené";
+    if(bp > 45) dom = "Basové"; else if(hp > 45) dom = "Výškové"; else if(mp > 50) dom = "Stredové";
+    $('txtDomBand').textContent = dom;
+
+    anLive.getFloatTimeDomainData(lRmsBuf);
+    let s=0, pk=0;
+    for(let i=0;i<lRmsBuf.length;i++){ s+=lRmsBuf[i]*lRmsBuf[i]; if(Math.abs(lRmsBuf[i])>pk) pk=Math.abs(lRmsBuf[i]); }
+    $('lRms').textContent = Math.sqrt(s/lRmsBuf.length).toFixed(3);
+    $('lPeak').textContent = pk.toFixed(3);
+
+    anPitch.getFloatTimeDomainData(pBuf); let pSq=0; for(let i=0;i<pBuf.length;i++) pSq+=pBuf[i]*pBuf[i];
+    if(Math.sqrt(pSq/pBuf.length)<0.01) { $('lHz').textContent="-- Hz"; $('lNote').textContent="--"; $('lCents').textContent="0"; $('tunerInd').style.left="50%"; return; }
+
+    let c=new Array(pBuf.length).fill(0);
+    for(let i=0; i<pBuf.length/2; i++) for(let j=0; j<pBuf.length/2; j++) c[i] += pBuf[j]*pBuf[j+i];
+    let d=0; while(c[d]>c[d+1]) d++; let mv=-1, mp2=-1; for(let i=d; i<pBuf.length/2; i++) if(c[i]>mv){mv=c[i]; mp2=i;}
+    let t0 = mp2; if(t0>0) { let a=(c[t0-1]+c[t0+1]-2*c[t0])/2, b=(c[t0+1]-c[t0-1])/2; if(a) t0=t0-b/(2*a); }
+    const hz = audioCtx.sampleRate / t0;
+
+    if(hz>20 && hz<5000) {
+        $('lHz').textContent = hz.toFixed(1) + " Hz";
+        const nN = 12*(Math.log2(hz/440))+69, rN = Math.round(nN), cents = Math.floor((nN-rN)*100);
+        $('lNote').textContent = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][rN%12] + (Math.floor(rN/12)-1);
+        $('lCents').textContent = cents; $('tunerInd').style.left = `calc(50% + ${cents}%)`;
+    }
+}
+
+// --- EQ A EXPORTY ---
+const upEq = () => { 
+    eqL.gain.value=$('eqL').value; eqM.gain.value=$('eqM').value; eqH.gain.value=$('eqH').value; 
+    $('eqLV').textContent=$('eqL').value+" dB"; $('eqMV').textContent=$('eqM').value+" dB"; $('eqHV').textContent=$('eqH').value+" dB"; 
+    requestRenderEQ(); // Zmení spektrogram vizuálne
+};
+['eqL','eqM','eqH'].forEach(id=>$(id).oninput=upEq); $('btnResEq').onclick=()=>{ $('eqL').value=$('eqM').value=$('eqH').value=0; upEq(); };
+
+const expC = (bId, oId, nm) => { const c=document.createElement('canvas'); c.width=$(bId).width; c.height=$(bId).height; const x=c.getContext('2d'); x.drawImage($(bId),0,0); x.drawImage($(oId),0,0); const a=document.createElement('a'); a.href=c.toDataURL(); a.download=nm; a.click(); };
+$('btnExpW').onclick = () => expC('canWBase','canWOver','waveform.png');
+$('btnExpS').onclick = () => expC('canSBase','canSOver','spectrogram.png');
+$('btnExpJ').onclick = () => { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(offStats,null,2)], {type:'application/json'})); a.download='analyza.json'; a.click(); };
+$('btnFocus').onclick = () => document.body.classList.toggle('focus-mode');
+
+</script>
+</body>
+</html>
